@@ -148,3 +148,48 @@ def test_custom_model_separable():
 
     assert not model_c().separable
     assert np.all(separability_matrix(model_c()) == [True, True])
+
+
+def test_nested_compound_model_separability():
+    """
+    Test that separability_matrix correctly handles nested CompoundModels.
+    
+    Regression test for issue where nested compound models would lose
+    their separability structure in the _cstack function.
+    """
+    # Create a basic compound model that should be separable
+    cm = models.Shift(1) & models.Shift(2)
+    
+    # Verify the basic compound model is separable
+    basic_sep_matrix = separability_matrix(cm)
+    expected_basic = np.array([[True, False], [False, True]])
+    assert_allclose(basic_sep_matrix, expected_basic)
+    
+    # Create a more complex compound model with the basic one nested
+    # This should preserve the separability of the nested part
+    nested_model = models.Shift(1) & models.Shift(2) & cm
+    
+    # The expected result should show that:
+    # - First two outputs depend only on first two inputs
+    # - Last two outputs depend only on last two inputs (from nested cm)
+    nested_sep_matrix = separability_matrix(nested_model)
+    expected_nested = np.array([
+        [True, False, False, False],
+        [False, True, False, False],
+        [False, False, True, False],
+        [False, False, False, True]
+    ])
+    assert_allclose(nested_sep_matrix, expected_nested)
+    
+    # Also test with a non-separable model on the left
+    rot = models.Rotation2D(angle=1)
+    mixed_nested = rot & cm
+    
+    mixed_sep_matrix = separability_matrix(mixed_nested)
+    expected_mixed = np.array([
+        [True, True, False, False],
+        [True, True, False, False],
+        [False, False, True, False],
+        [False, False, False, True]
+    ])
+    assert_allclose(mixed_sep_matrix, expected_mixed)
